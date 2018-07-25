@@ -84,13 +84,6 @@
 #define IP6_ECN_set_ce(a, b) IP6_ECN_set_ce(b)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-#define time_is_before_jiffies64(a) time_after64(get_jiffies_64(), a)
-#define time_is_after_jiffies64(a) time_before64(get_jiffies_64(), a)
-#define time_is_before_eq_jiffies64(a) time_after_eq64(get_jiffies_64(), a)
-#define time_is_after_eq_jiffies64(a) time_before_eq64(get_jiffies_64(), a)
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0) && IS_ENABLED(CONFIG_IPV6) && !defined(ISRHEL7)
 #include <net/ipv6.h>
 struct ipv6_stub_type {
@@ -334,11 +327,24 @@ static inline int get_random_bytes_wait(void *buf, int nbytes)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0) && !defined(ISRHEL7)
-#include <linux/ktime.h>
-static inline u64 ktime_get_ns(void)
+#include <linux/hrtimer.h>
+static inline u64 ktime_get_boot_ns(void)
 {
-	return ktime_to_ns(ktime_get());
+	return ktime_to_ns(ktime_get_boottime());
 }
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
+#include <linux/hrtimer.h>
+#else
+#include <linux/timekeeping.h>
+#endif
+static inline u64 __wgcompat_ktime_get_boot_fast_ns(void)
+{
+	return ktime_get_boot_ns();
+}
+#define ktime_get_boot_fast_ns __wgcompat_ktime_get_boot_fast_ns
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0)
@@ -589,6 +595,19 @@ static inline void *skb_put_data(struct sk_buff *skb, const void *data, unsigned
 	memcpy(tmp, data, len);
 	return tmp;
 }
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) && !defined(ISRHEL7)
+#define napi_complete_done(n, work_done) napi_complete(n)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
+#include <linux/netdevice.h>
+/* NAPI_STATE_SCHED gets set by netif_napi_add anyway, so this is safe.
+ * Also, kernels without NAPI_STATE_NO_BUSY_POLL don't have a call to
+ * napi_hash_add inside of netif_napi_add.
+ */
+#define NAPI_STATE_NO_BUSY_POLL NAPI_STATE_SCHED
 #endif
 
 /* https://lkml.kernel.org/r/20170624021727.17835-1-Jason@zx2c4.com */
